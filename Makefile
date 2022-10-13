@@ -1,3 +1,5 @@
+CC = gcc
+CC_FLAGS = -w -g
 
 all: serverthread serverfork
 
@@ -18,4 +20,4 @@ serverthread: serverthread.o
 
 
 clean:
-	rm *.o *.a perf_*.txt  tmp.* serverfork serverthread
+	rm *.o *.a perf_*.txt  tmp.* serverfork serverthread randomFile big small
