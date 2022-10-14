@@ -36,7 +36,6 @@ echo -e "$randomString"  > randomFile
 ##echo "Testing that the forked server can retrevie the newly created randomFile"
 fString=$(curl -s http://127.0.0.1:$portFORK/randomFile)
 
-
 if [[ "$randomString" == "$fString" ]]; then
     echo "SUMMARY: The Forked server, correctly delivered the file (randomFile)."
 else
@@ -51,9 +50,9 @@ fString=$(curl -s http://127.0.0.1:$portTHREAD/randomFile)
 
 
 if [[ "$randomString" == "$fString" ]]; then
-    echo "SUMMARY: The Forked server, correctly delivered the file (randomFile)."
+    echo "SUMMARY: The Threaded server, correctly delivered the file (randomFile)."
 else
-    echo "ERROR: The Forked server, _did not_ work as expectec (randomFile)."
+    echo "ERROR: The Threaded server, _did not_ work as expectec (randomFile)."
     echo -e "RandomSRC: $randomString"  
     echo "   server: $fString"
     exit 1

@@ -22,7 +22,7 @@ static int uid = 10;
 
 void printIpAddr(struct sockaddr_in addr)
 {
-  printf("Client connected from %d.%d.%d.%d:%d\n",
+  printf("%d.%d.%d.%d:%d",
          addr.sin_addr.s_addr & 0xff,
          (addr.sin_addr.s_addr & 0xff00) >> 8,
          (addr.sin_addr.s_addr & 0xff0000) >> 16,
@@ -37,65 +37,81 @@ typedef struct
   int uid;
 } clientDetails;
 
-typedef struct
+void handleFile(clientDetails* currentClient, char* fileName, char* prompt)
 {
-  clientDetails *array;
-  size_t used;
-  size_t size;
-} Array;
-
-Array clients;
-
-pthread_mutex_t clients_mutex = PTHREAD_MUTEX_INITIALIZER;
-
-void initArray(Array *arr, size_t initialSize)
-{
-  arr->array = (clientDetails*)malloc(initialSize * sizeof(clientDetails));
-  arr->used = 0;
-  arr->size = initialSize;
-}
-
-void insertClient(Array *arr, clientDetails client)
-{
-  pthread_mutex_lock(&clients_mutex);
-  if (arr->used == arr->size)
+  //Find HTTP version
+  char http[10];
+  memset(http, 0, 10);
+  for(int i = 0; i < 10; i++)
   {
-    arr->size += 5;
-    arr->array = (clientDetails*)realloc(arr->array, arr->size * sizeof(clientDetails));
-  }
-  arr->array[arr->used++] = client;
-
-  pthread_mutex_unlock(&clients_mutex);
-}
-
-void removeClient(Array *arr, int uid)
-{
-  pthread_mutex_lock(&clients_mutex);
-
-  printf("Removing client\n");
-  for (int i = 0; i < (int)arr->used; i++)
-  {
-    if (arr->array[i].uid == uid)
+    if(prompt[6 + (int)strlen(fileName) + i] != '\r')
     {
-      for (int j = i; j < ((int)arr->used - 1); j++)
-      {
-        arr->array[j] = arr->array[j + 1];
-      }
-      arr->used--;
-      break;
+      http[i] = prompt[6 + (int)strlen(fileName) + i];
     }
   }
 
-  pthread_mutex_unlock(&clients_mutex);
-}
+  FILE* currentFile = fopen(fileName, "r");
+  if(currentFile != NULL)
+  {
+    //Print OK
+    printIpAddr(currentClient->address);
+    printf(" [200]: OK /%s\n", fileName);
 
-void freeArray(Array *arr)
-{
-  pthread_mutex_lock(&clients_mutex);
-  free(arr->array);
-  arr->array = NULL;
-  arr->used = arr->size = 0;
-  pthread_mutex_unlock(&clients_mutex);
+    //Send 200 OK HTTP protocol to client
+    char buf[(int)strlen(http) + 11];
+    memset(buf, 0, sizeof(buf));
+    sprintf(buf, "%s 200 OK\r\n\r\n", http);
+    if(write(currentClient->clientSock, buf, sizeof(buf)) == -1)
+    {
+      printf("Error sending OK\n");
+    }
+
+    //Determine size of the file
+    size_t sizeOfFile;
+    if(fseek(currentFile, 0, SEEK_END) == -1)
+    {
+      printf("Error doing fseek, SEEK_END\n");
+    }
+    sizeOfFile = ftell(currentFile);
+    if(fseek(currentFile, 0, SEEK_SET) == -1)
+    {
+      printf("Error doing fseek, SEEK_SET\n");
+    }
+
+    //TODO: Separate to 1500 bytes maximum and iterate until everything has been sent.
+    //Example: If a file is 2000 bytes, send a buffer with 1500 bytes and then another one with the remaining 500.
+
+    //Dynamically allocate the required buffer size
+    char text[sizeOfFile];
+    memset(text, 0, sizeOfFile);
+
+    //Fill up the buffer with the data from the file
+    fread(text, sizeof(char), sizeOfFile, currentFile);
+
+    //Send the answer over to the client
+    if(write(currentClient->clientSock, text, sizeof(text)) == -1)
+    {
+      printf("Error sending text back to client!\n");
+    }
+
+    //Close the file when we are done using it
+    fclose(currentFile);
+  }
+  else
+  {
+    //Print Not Found
+    printIpAddr(currentClient->address);
+    printf(" [404]: Not Found /%s\n", fileName);
+
+    //Send Error 404 HTTP protocol to client
+    char buf[(int)strlen(http) + 18];
+    memset(buf, 0, sizeof(buf));
+    sprintf(buf, "%s 404 Not Found\r\n\r\n", http);
+    if(write(currentClient->clientSock, buf, sizeof(buf)) == -1)
+    {
+      printf("Error sending Not Found\n");
+    }
+  }
 }
 
 void *handle_client(void *arg)
@@ -103,21 +119,20 @@ void *handle_client(void *arg)
   int leave_flag = 0;
 
   clientDetails *currentClient = (clientDetails *)arg;
-
-  insertClient(&clients, *currentClient);
   
-  //Recieve a prompt and determine how it should be handled by the threads.
+  //Recieve a prompt and check if it's a valid HTTP protocol and meets the requirements
   char prompt[150];
   memset(prompt, 0, 150);
-  char fileName[20];
-  memset(fileName, 0, 20);
+  char fileName[50];
+  memset(fileName, 0, 50);
   if (recv(currentClient->clientSock, &prompt, sizeof(prompt), 0) == -1)
   {
     printf("Recieve failed!\n");
   }
   else
   {
-    if(prompt[0] == 'A')
+    //Check if the first part of the HTTP protocol is GET and then check if there are too many directories required to reach the file
+    if(prompt[0] != 'G')
     {
       leave_flag = 1;
     }
@@ -136,7 +151,7 @@ void *handle_client(void *arg)
           }
           if(numOfSlashes > 1)
           {
-            //Too many slashes
+            //Too many slashes == Too many directories
             leave_flag = 1;
             break;
           }
@@ -145,7 +160,7 @@ void *handle_client(void *arg)
         {
           if(prompt[i] == ' ' && prompt[i + 1] == 'H')
           {
-            //HTTP part found.
+            //End of the file name reached
             break;
           }
           fileName[i - startPos] = prompt[i];
@@ -154,20 +169,30 @@ void *handle_client(void *arg)
     }
   }
 
-  printf("%s", prompt);
-  printf("%s\n", fileName);
-
-  /* Loop if any back and forth is needed
-  while (1)
+  //If no errors in Protocol, handle the client request
+  if(leave_flag != 1)
   {
-    if (leave_flag)
+    handleFile(currentClient, fileName, prompt);
+  }
+  else
+  {
+    //Print Unknown protocol
+    printIpAddr(currentClient->address);
+    printf(" [400]: Unknown Protocol %s\n", fileName);
+
+    //Send Error 400 HTTP protocol to client
+    char buf[34] = "HTTP/x.x 400 Unknown Protocol\r\n\r\n";
+    if(write(currentClient->clientSock, buf, sizeof(buf)) == -1)
     {
-      break;
+      printf("Error sending Unknown Protocol\n");
     }
   }
-  */
+
+  //Close the socket
+  printIpAddr(currentClient->address);
+  printf(" Closing\n");
+
   close(currentClient->clientSock);
-  removeClient(&clients, currentClient->uid);
   free(currentClient);
   pthread_detach(pthread_self());
 
@@ -250,7 +275,7 @@ int main(int argc, char *argv[])
     exit(1);
   }
 
-  printf("[x]Listening on %s:%d \n", Desthost, port);
+  printf("[x]Threaded Server Listening on %s:%d\r\n\r\n", Desthost, port);
 
   rv = listen(serverSock, backLogSize);
   if (rv == -1)
@@ -261,8 +286,6 @@ int main(int argc, char *argv[])
 
   struct sockaddr_in clientAddr;
   socklen_t client_size = sizeof(clientAddr);
-
-  initArray(&clients, 5);
 
   int clientSock = 0;
 
@@ -275,6 +298,7 @@ int main(int argc, char *argv[])
     }
 
     printIpAddr(clientAddr);
+    printf(" Accepted\n");
 
     clientDetails *currentClient = (clientDetails *)malloc(sizeof(clientDetails));
     memset(currentClient, 0, sizeof(clientDetails));
@@ -286,7 +310,6 @@ int main(int argc, char *argv[])
   }
 
   close(serverSock);
-  freeArray(&clients);
   printf("done.\n");
   return(0);
 }
