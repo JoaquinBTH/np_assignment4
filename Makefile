@@ -20,4 +20,4 @@ serverthread: serverthread.o
 
 
 clean:
-	rm *.o *.a perf_*.txt  tmp.* serverfork serverthread randomFile big small
+	rm *.o perf_*.txt  tmp.* serverfork serverthread randomFile big small *.log *.png
