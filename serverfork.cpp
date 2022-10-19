@@ -407,12 +407,21 @@ int main(int argc, char *argv[])
     sprintf(addition, " Accepted");
     printIpAddr(currentClient->address, currentClient->port, addition);
 
-    fid = fork();
-    if (fid == -1)
+    for (int i = 0; i < 3; i++)
     {
-      printf("Fork failed\n");
+      fid = fork();
+      if (fid == -1)
+      {
+        printf("Fork failed\n");
+        sleep(1);
+      }
+      else
+      {
+        break;
+      }
     }
-    else if (fid == 0)
+
+    if (fid == 0)
     {
       // Child process
       handle_client((void *)currentClient);
@@ -424,10 +433,7 @@ int main(int argc, char *argv[])
       free(currentClient);
       exit(0);
     }
-    else if (fid > 0)
-    {
-      printf("Parent process\n");
-    }
+    fid = wait(NULL);
     close(currentClient->clientSock);
     free(currentClient);
   }
