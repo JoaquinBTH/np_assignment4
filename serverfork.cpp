@@ -90,12 +90,9 @@ void handleFile(clientDetails *currentClient, char *fileName, char *prompt)
       printf("Error doing fseek, SEEK_SET\n");
     }
 
-    // TODO: Separate to 1500 bytes maximum and iterate until everything has been sent.
-    // Example: If a file is 2000 bytes, send a buffer with 1500 bytes and then another one with the remaining 500.
-    // Problem with this implementation is that it generates error when doing multiple curls on big. Changing from > (size_t)1500 to 15000 so it doesn't go into the loop.
-    // Ask for advice on this issue.
+    // Separate the writes in increments of 1500 maximum byte size to account for clients not having large enough buffers to contain all the information received.
 
-    if (sizeOfFile > (size_t)15000)
+    if (sizeOfFile > (size_t)1500)
     {
       for (int i = 0; i < (int)sizeOfFile / 1500; i++)
       {

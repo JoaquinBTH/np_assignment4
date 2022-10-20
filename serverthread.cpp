@@ -21,6 +21,8 @@ static int uid = 10;
 
 char addition[100];
 
+pthread_mutex_t clients_mutex = PTHREAD_MUTEX_INITIALIZER;
+
 void printIpAddr(struct addrinfo *addr, struct sockaddr_in port, char *addition)
 {
   char ipString[40];
@@ -90,12 +92,9 @@ void handleFile(clientDetails *currentClient, char *fileName, char *prompt)
       printf("Error doing fseek, SEEK_SET\n");
     }
 
-    // TODO: Separate to 1500 bytes maximum and iterate until everything has been sent.
-    // Example: If a file is 2000 bytes, send a buffer with 1500 bytes and then another one with the remaining 500.
-    // Problem with this implementation is that it generates error when doing multiple curls on big. Changing from > (size_t)1500 to 15000 so it doesn't go into the loop.
-    // Ask for advice on this issue.
+    // Separate the writes in increments of 1500 maximum byte size to account for clients not having large enough buffers to contain all the information received.
 
-    if (sizeOfFile > (size_t)15000)
+    if (sizeOfFile > (size_t)1500)
     {
       for (int i = 0; i < (int)sizeOfFile / 1500; i++)
       {
@@ -224,7 +223,9 @@ void *handle_client(void *arg)
   // If no errors in Protocol, handle the client request
   if (leave_flag != 1)
   {
+    pthread_mutex_lock(&clients_mutex);
     handleFile(currentClient, fileName, prompt);
+    pthread_mutex_unlock(&clients_mutex);
   }
   else
   {
@@ -232,7 +233,6 @@ void *handle_client(void *arg)
     memset(addition, 0, 100);
     sprintf(addition, " [400]: Unknown Protocol %s", fileName);
     printIpAddr(currentClient->address, currentClient->port, addition);
-    // printf(" [400]: Unknown Protocol %s\n", fileName);
 
     // Send Error 400 HTTP protocol to client
     char buf[34] = "HTTP/x.x 400 Unknown Protocol\r\n\r\n";
@@ -283,7 +283,7 @@ int main(int argc, char *argv[])
   memset(&hint, 0, sizeof(hint));
   hint.ai_family = AF_UNSPEC;
   hint.ai_socktype = SOCK_STREAM;
-
+  
   if ((rv = getaddrinfo(Desthost, Destport, &hint, &servinfo)) != 0)
   {
     fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(rv));
