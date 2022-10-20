@@ -69,7 +69,6 @@ void handleFile(clientDetails *currentClient, char *fileName, char *prompt)
     memset(addition, 0, 100);
     sprintf(addition, " [200]: OK /%s", fileName);
     printIpAddr(currentClient->address, currentClient->port, addition);
-    // printf(" [200]: OK /%s\n", fileName);
 
     // Send 200 OK HTTP protocol to client
     char buf[(int)strlen(http) + 11];
@@ -98,7 +97,7 @@ void handleFile(clientDetails *currentClient, char *fileName, char *prompt)
     {
       for (int i = 0; i < (int)sizeOfFile / 1500; i++)
       {
-        // Dynamically allocate the required buffer size
+        // Allocate the required buffer size
         char text[1500];
         memset(text, 0, 1500);
 
@@ -127,6 +126,9 @@ void handleFile(clientDetails *currentClient, char *fileName, char *prompt)
           printf("Error sending text back to client!\n");
         }
       }
+
+      //Close the file when we are done using it
+      fclose(currentFile);
     }
     else
     {
@@ -152,7 +154,6 @@ void handleFile(clientDetails *currentClient, char *fileName, char *prompt)
     memset(addition, 0, 100);
     sprintf(addition, " [404]: Not Found /%s", fileName);
     printIpAddr(currentClient->address, currentClient->port, addition);
-    // printf(" [404]: Not Found /%s\n", fileName);
 
     // Send Error 404 HTTP protocol to client
     char buf[(int)strlen(http) + 18];
@@ -246,7 +247,6 @@ void *handle_client(void *arg)
   memset(addition, 0, 100);
   sprintf(addition, " Closing");
   printIpAddr(currentClient->address, currentClient->port, addition);
-  // printf(" Closing\n");
 
   close(currentClient->clientSock);
   free(currentClient);
