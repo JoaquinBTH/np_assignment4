@@ -126,9 +126,6 @@ void handleFile(clientDetails *currentClient, char *fileName, char *prompt)
           printf("Error sending text back to client!\n");
         }
       }
-
-      //Close the file when we are done using it
-      fclose(currentFile);
     }
     else
     {
